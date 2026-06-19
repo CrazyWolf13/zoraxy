@@ -43,6 +43,17 @@ type AuthRouterOptions struct {
 	// X-Forwarded-* headers.
 	UseXOriginalHeaders bool
 
+	// OutpostPassthrough enables automatic reverse-proxying + authentication bypass of the
+	// auth provider's outpost/callback subpath (OutpostPathPrefix) for every host using
+	// forward auth. This makes single-application setups (e.g. Authentik per-app proxy
+	// providers) work without configuring a virtual directory per host.
+	OutpostPassthrough bool
+
+	// OutpostPathPrefix is the public path prefix routed to the outpost (derived from
+	// Address) and excluded from authentication when OutpostPassthrough is enabled.
+	// Defaults to DefaultOutpostPathPrefix.
+	OutpostPathPrefix string
+
 	Logger   *logger.Logger
 	Database *database.Database
 }
@@ -68,6 +79,11 @@ func NewAuthRouter(options *AuthRouterOptions) *AuthRouter {
 	options.Database.Read(DatabaseTable, DatabaseKeyRequestExcludedCookies, &requestExcludedCookies)
 	options.Database.Read(DatabaseTable, DatabaseKeyRequestIncludeBody, &options.RequestIncludeBody)
 	options.Database.Read(DatabaseTable, DatabaseKeyUseXOriginalHeaders, &options.UseXOriginalHeaders)
+	options.Database.Read(DatabaseTable, DatabaseKeyOutpostPassthrough, &options.OutpostPassthrough)
+	options.Database.Read(DatabaseTable, DatabaseKeyOutpostPathPrefix, &options.OutpostPathPrefix)
+	if strings.TrimSpace(options.OutpostPathPrefix) == "" {
+		options.OutpostPathPrefix = DefaultOutpostPathPrefix
+	}
 
 	options.ResponseHeaders = cleanSplit(responseHeaders)
 	options.ResponseClientHeaders = cleanSplit(responseClientHeaders)
@@ -113,6 +129,8 @@ func (ar *AuthRouter) handleOptionsGET(w http.ResponseWriter, r *http.Request) {
 		DatabaseKeyRequestExcludedCookies: ar.options.RequestExcludedCookies,
 		DatabaseKeyRequestIncludeBody:     ar.options.RequestIncludeBody,
 		DatabaseKeyUseXOriginalHeaders:    ar.options.UseXOriginalHeaders,
+		DatabaseKeyOutpostPassthrough:     ar.options.OutpostPassthrough,
+		DatabaseKeyOutpostPathPrefix:      ar.options.OutpostPathPrefix,
 	})
 
 	utils.SendJSONResponse(w, string(js))
@@ -137,6 +155,8 @@ func (ar *AuthRouter) handleOptionsPOST(w http.ResponseWriter, r *http.Request) 
 	requestExcludedCookies, _ := utils.PostPara(r, DatabaseKeyRequestExcludedCookies)
 	requestIncludeBody, _ := utils.PostPara(r, DatabaseKeyRequestIncludeBody)
 	useXOriginalHeaders, _ := utils.PostPara(r, DatabaseKeyUseXOriginalHeaders)
+	outpostPassthrough, _ := utils.PostPara(r, DatabaseKeyOutpostPassthrough)
+	outpostPathPrefix, _ := utils.PostPara(r, DatabaseKeyOutpostPathPrefix)
 
 	// Write changes to runtime
 	ar.options.Address = address
@@ -147,6 +167,11 @@ func (ar *AuthRouter) handleOptionsPOST(w http.ResponseWriter, r *http.Request) 
 	ar.options.RequestExcludedCookies = cleanSplit(requestExcludedCookies)
 	ar.options.RequestIncludeBody, _ = strconv.ParseBool(requestIncludeBody)
 	ar.options.UseXOriginalHeaders, _ = strconv.ParseBool(useXOriginalHeaders)
+	ar.options.OutpostPassthrough, _ = strconv.ParseBool(outpostPassthrough)
+	ar.options.OutpostPathPrefix = strings.TrimSpace(outpostPathPrefix)
+	if ar.options.OutpostPathPrefix == "" {
+		ar.options.OutpostPathPrefix = DefaultOutpostPathPrefix
+	}
 
 	// Write changes to database
 	ar.options.Database.Write(DatabaseTable, DatabaseKeyAddress, address)
@@ -157,6 +182,8 @@ func (ar *AuthRouter) handleOptionsPOST(w http.ResponseWriter, r *http.Request) 
 	ar.options.Database.Write(DatabaseTable, DatabaseKeyRequestExcludedCookies, requestExcludedCookies)
 	ar.options.Database.Write(DatabaseTable, DatabaseKeyRequestIncludeBody, ar.options.RequestIncludeBody)
 	ar.options.Database.Write(DatabaseTable, DatabaseKeyUseXOriginalHeaders, ar.options.UseXOriginalHeaders)
+	ar.options.Database.Write(DatabaseTable, DatabaseKeyOutpostPassthrough, ar.options.OutpostPassthrough)
+	ar.options.Database.Write(DatabaseTable, DatabaseKeyOutpostPathPrefix, ar.options.OutpostPathPrefix)
 
 	ar.logOptions()
 
@@ -172,6 +199,8 @@ func (ar *AuthRouter) handleOptionsDelete(w http.ResponseWriter, r *http.Request
 	ar.options.RequestExcludedCookies = nil
 	ar.options.RequestIncludeBody = false
 	ar.options.UseXOriginalHeaders = false
+	ar.options.OutpostPassthrough = false
+	ar.options.OutpostPathPrefix = DefaultOutpostPathPrefix
 
 	ar.options.Database.Delete(DatabaseTable, DatabaseKeyAddress)
 	ar.options.Database.Delete(DatabaseTable, DatabaseKeyResponseHeaders)
@@ -181,6 +210,8 @@ func (ar *AuthRouter) handleOptionsDelete(w http.ResponseWriter, r *http.Request
 	ar.options.Database.Delete(DatabaseTable, DatabaseKeyRequestExcludedCookies)
 	ar.options.Database.Delete(DatabaseTable, DatabaseKeyRequestIncludeBody)
 	ar.options.Database.Delete(DatabaseTable, DatabaseKeyUseXOriginalHeaders)
+	ar.options.Database.Delete(DatabaseTable, DatabaseKeyOutpostPassthrough)
+	ar.options.Database.Delete(DatabaseTable, DatabaseKeyOutpostPathPrefix)
 
 	utils.SendOK(w)
 }
@@ -272,5 +303,5 @@ func (ar *AuthRouter) handle500Error(w http.ResponseWriter, err error, message s
 }
 
 func (ar *AuthRouter) logOptions() {
-	ar.options.Logger.PrintAndLog(LogTitle, fmt.Sprintf("Forward Authz Options -> Address: %s, Response Headers: %s, Response Client Headers: %s, Request Headers: %s, Request Included Cookies: %s, Request Excluded Cookies: %s, Request Include Body: %t, Use X-Original Headers: %t", ar.options.Address, strings.Join(ar.options.ResponseHeaders, ";"), strings.Join(ar.options.ResponseClientHeaders, ";"), strings.Join(ar.options.RequestHeaders, ";"), strings.Join(ar.options.RequestIncludedCookies, ";"), strings.Join(ar.options.RequestExcludedCookies, ";"), ar.options.RequestIncludeBody, ar.options.UseXOriginalHeaders), nil)
+	ar.options.Logger.PrintAndLog(LogTitle, fmt.Sprintf("Forward Authz Options -> Address: %s, Response Headers: %s, Response Client Headers: %s, Request Headers: %s, Request Included Cookies: %s, Request Excluded Cookies: %s, Request Include Body: %t, Use X-Original Headers: %t, Outpost Passthrough: %t, Outpost Path Prefix: %s", ar.options.Address, strings.Join(ar.options.ResponseHeaders, ";"), strings.Join(ar.options.ResponseClientHeaders, ";"), strings.Join(ar.options.RequestHeaders, ";"), strings.Join(ar.options.RequestIncludedCookies, ";"), strings.Join(ar.options.RequestExcludedCookies, ";"), ar.options.RequestIncludeBody, ar.options.UseXOriginalHeaders, ar.options.OutpostPassthrough, ar.options.OutpostPathPrefix), nil)
 }

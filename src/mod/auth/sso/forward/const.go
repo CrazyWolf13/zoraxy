@@ -15,6 +15,12 @@ const (
 	DatabaseKeyRequestExcludedCookies = "requestExcludedCookies"
 	DatabaseKeyRequestIncludeBody     = "requestIncludeBody"
 	DatabaseKeyUseXOriginalHeaders    = "useXOriginalHeaders"
+	DatabaseKeyOutpostPassthrough     = "outpostPassthrough"
+	DatabaseKeyOutpostPathPrefix      = "outpostPathPrefix"
+
+	// DefaultOutpostPathPrefix is the public path prefix served by the Authentik outpost.
+	// It is used as the default value for the outpost passthrough preset.
+	DefaultOutpostPathPrefix = "/outpost.goauthentik.io"
 
 	HeaderXForwardedProto  = "X-Forwarded-Proto"
 	HeaderXForwardedHost   = "X-Forwarded-Host"

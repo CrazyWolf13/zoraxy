@@ -126,6 +126,27 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		//Forward-auth outpost passthrough (global preset). For hosts using forward auth, the
+		//auth provider's outpost/callback subpath (e.g. Authentik's /outpost.goauthentik.io) is
+		//transparently reverse-proxied to the outpost and excluded from authentication, so
+		//single-application setups work without a per-host virtual directory (see issue #895).
+		//The outpost upstream is derived from the global forward auth address. Matching is
+		//hardened against path traversal / boundary tricks (see forward.MatchOutpostPassthrough).
+		if sep.AuthenticationProvider.AuthMethod == AuthMethodForward && h.Parent.Option.ForwardAuthRouter != nil {
+			if outpostBase, outpostPrefix, matched := h.Parent.Option.ForwardAuthRouter.MatchOutpostPassthrough(r.RequestURI); matched {
+				if outpostProxy := h.Parent.getForwardOutpostProxy(outpostBase, outpostPrefix); outpostProxy != nil {
+					h.vdirRequest(w, r, &VirtualDirectoryEndpoint{
+						MatchingPath: outpostPrefix,
+						Domain:       strings.TrimPrefix(strings.TrimPrefix(outpostBase, "https://"), "http://"),
+						RequireTLS:   strings.HasPrefix(outpostBase, "https://"),
+						proxy:        outpostProxy,
+						parent:       sep,
+					})
+					return
+				}
+			}
+		}
+
 		//Validate auth (basic auth or SSO auth)
 		respWritten := handleAuthProviderRouting(sep, w, r, h)
 		if respWritten {

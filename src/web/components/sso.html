@@ -30,6 +30,17 @@
                 <input type="text" id="forwardAuthAddress" name="forwardAuthAddress" placeholder="Enter Forward Auth Address">
                 <small>The full remote address or URL of the authorization servers forward auth endpoint. <strong>Example:</strong> http://127.0.0.1:9091/authz/forward-auth</small>
             </div>
+            <div class="field">
+                <div class="ui toggle checkbox">
+                    <input type="checkbox" id="forwardAuthOutpostPassthrough" name="forwardAuthOutpostPassthrough">
+                    <label>Authentik per-application passthrough<br><small>Automatically route and skip authentication for the auth provider's outpost callback path (below) on <b>every</b> host using Forward Auth. This makes single-application setups (e.g. Authentik per-app proxy providers) work <b>without adding a virtual directory per host</b>. The outpost upstream is derived from the Address above.</small></label>
+                </div>
+            </div>
+            <div class="field">
+                <label for="forwardAuthOutpostPathPrefix">Outpost Callback Path</label>
+                <input type="text" id="forwardAuthOutpostPathPrefix" name="forwardAuthOutpostPathPrefix" placeholder="/outpost.goauthentik.io">
+                <small>Public path prefix proxied to the outpost and excluded from authentication when passthrough is enabled. Must also appear within the Address above. Default: <code>/outpost.goauthentik.io</code> (Authentik).</small>
+            </div>
             <div class="ui basic segment advanceoptions" style="margin-top:0.6em;">
                 <div class="ui advancedSSOForwardAuthOptions accordion">
                     <div class="title">
@@ -370,6 +381,16 @@
                 } else {
                     $("#forwardAuthRequestUseXOriginalHeaders").parent().checkbox("set unchecked");
                 }
+                if (data.outpostPassthrough != null && data.outpostPassthrough === true) {
+                    $("#forwardAuthOutpostPassthrough").parent().checkbox("set checked");
+                } else {
+                    $("#forwardAuthOutpostPassthrough").parent().checkbox("set unchecked");
+                }
+                if (data.outpostPathPrefix != null && data.outpostPathPrefix !== "") {
+                    $('#forwardAuthOutpostPathPrefix').val(data.outpostPathPrefix);
+                } else {
+                    $('#forwardAuthOutpostPathPrefix').val("/outpost.goauthentik.io");
+                }
             },
             error: function(jqXHR, textStatus, errorThrown) {
                 console.error('Error fetching SSO settings:', textStatus, errorThrown);
@@ -391,6 +412,8 @@
         const requestExcludedCookies = $('#forwardAuthRequestExcludedCookies').val();
         const requestIncludeBody = $('#forwardAuthRequestIncludeBody').is(':checked');
         const useXOriginalHeaders = $('#forwardAuthRequestUseXOriginalHeaders').is(':checked');
+        const outpostPassthrough = $('#forwardAuthOutpostPassthrough').is(':checked');
+        const outpostPathPrefix = $('#forwardAuthOutpostPathPrefix').val();
 
         console.log(`Updating Forward Auth settings. Address: ${address}. Response Headers: ${responseHeaders}. Response Client Headers: ${responseClientHeaders}. Request Headers: ${requestHeaders}. Request Included Cookies: ${requestIncludedCookies}. Request Excluded Cookies: ${requestExcludedCookies}. Request Include Body: ${requestIncludeBody}. Use X-Original-* Headers: ${useXOriginalHeaders}.`);
 
@@ -406,6 +429,8 @@
                 requestExcludedCookies: requestExcludedCookies,
                 requestIncludeBody: requestIncludeBody,
                 useXOriginalHeaders: useXOriginalHeaders,
+                outpostPassthrough: outpostPassthrough,
+                outpostPathPrefix: outpostPathPrefix,
             },
             success: function(data) {
                 if (data.error !== undefined) {

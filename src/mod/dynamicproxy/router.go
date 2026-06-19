@@ -73,6 +73,38 @@ func (router *Router) PrepareProxyRoute(endpoint *ProxyEndpoint) (*ProxyEndpoint
 	return endpoint, nil
 }
 
+// getForwardOutpostProxy returns a cached reverse proxy to the forward-auth outpost base
+// URL, building it on first use and rebuilding it if the base URL changes. The matchingPath
+// is the public prefix that is stripped before proxying (mirrors virtual directory routing).
+// Returns nil if the base URL cannot be parsed.
+func (router *Router) getForwardOutpostProxy(baseURLWithScheme string, matchingPath string) *dpcore.ReverseProxy {
+	router.forwardOutpostProxyMutex.RLock()
+	if router.forwardOutpostProxy != nil && router.forwardOutpostProxyBase == baseURLWithScheme {
+		proxy := router.forwardOutpostProxy
+		router.forwardOutpostProxyMutex.RUnlock()
+		return proxy
+	}
+	router.forwardOutpostProxyMutex.RUnlock()
+
+	router.forwardOutpostProxyMutex.Lock()
+	defer router.forwardOutpostProxyMutex.Unlock()
+	//Re-check after acquiring the write lock in case another goroutine built it
+	if router.forwardOutpostProxy != nil && router.forwardOutpostProxyBase == baseURLWithScheme {
+		return router.forwardOutpostProxy
+	}
+
+	target, err := url.Parse(baseURLWithScheme)
+	if err != nil {
+		return nil
+	}
+	proxy := dpcore.NewDynamicProxyCore(target, matchingPath, &dpcore.DpcoreOptions{
+		FlushInterval: 500 * time.Millisecond,
+	})
+	router.forwardOutpostProxy = proxy
+	router.forwardOutpostProxyBase = baseURLWithScheme
+	return proxy
+}
+
 // Add Proxy Route to current runtime. Call to PrepareProxyRoute before adding to runtime
 func (router *Router) AddProxyRouteToRuntime(endpoint *ProxyEndpoint) error {
 	lookupHostname := strings.ToLower(endpoint.RootOrMatchingDomain)

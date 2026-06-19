@@ -107,6 +107,12 @@ type Router struct {
 
 	captchaSessionStore *captcha.SessionStore //CAPTCHA session store for tracking verified sessions
 
+	// Forward-auth outpost passthrough: cached reverse proxy to the auth outpost, built
+	// lazily from the (global) forward auth address and rebuilt if it changes. See ServeHTTP.
+	forwardOutpostProxy      *dpcore.ReverseProxy
+	forwardOutpostProxyBase  string
+	forwardOutpostProxyMutex sync.RWMutex
+
 	// Secondary listening ports and their servers
 	secondaryServers     map[string]*http.Server //Map of secondary listening servers, key is the listening address (ip:port or :port)
 	secondaryStopChans   map[string]chan bool    //Stop channels for secondary listening servers
