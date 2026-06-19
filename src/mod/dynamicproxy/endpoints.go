@@ -3,6 +3,8 @@ package dynamicproxy
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
+	"path"
 	"strings"
 
 	"golang.org/x/text/cases"
@@ -79,6 +81,42 @@ func (ep *ProxyEndpoint) AddUserDefinedHeader(newHeaderRule *rewrite.UserDefined
 func (ep *ProxyEndpoint) GetVirtualDirectoryHandlerFromRequestURI(requestURI string) *VirtualDirectoryEndpoint {
 	for _, vdir := range ep.VirtualDirectories {
 		if strings.HasPrefix(requestURI, vdir.MatchingPath) {
+			thisVdir := vdir
+			return thisVdir
+		}
+	}
+	return nil
+}
+
+// matchesAuthBypassPrefix reports whether the given request URI falls *within* the
+// matchingPath using normalized path boundaries. Unlike the loose prefix matching used
+// for normal vdir routing, this is hardened against:
+//   - boundary tricks    e.g. "/outpost.goauthentik.io.evil" must NOT match "/outpost.goauthentik.io"
+//   - path traversal     e.g. "/outpost.goauthentik.io/../admin" must NOT match (resolves to "/admin")
+//   - encoded traversal  e.g. "/outpost.goauthentik.io/%2e%2e/admin"
+//
+// It is intentionally used ONLY for the authentication-bypass decision, where a false
+// positive would skip auth on a path the operator did not intend to expose.
+func matchesAuthBypassPrefix(requestURI string, matchingPath string) bool {
+	requestPath := requestURI
+	if u, err := url.ParseRequestURI(requestURI); err == nil {
+		//Use the decoded path only, dropping any query string / fragment
+		requestPath = u.Path
+	}
+	requestPath = path.Clean("/" + requestPath)
+	cleanedMatch := path.Clean("/" + matchingPath)
+	return requestPath == cleanedMatch || strings.HasPrefix(requestPath, cleanedMatch+"/")
+}
+
+// GetAuthBypassVirtualDirectoryFromRequestURI returns the first enabled virtual directory
+// that has BypassAuth set and whose (normalized) matching path contains the request URI.
+// This is checked before any authentication provider runs so that auth callback paths
+// (e.g. Authentik's /outpost.goauthentik.io) can reach their upstream without being
+// intercepted by forward auth, which otherwise causes a redirect loop in single-application
+// mode (see issue #895).
+func (ep *ProxyEndpoint) GetAuthBypassVirtualDirectoryFromRequestURI(requestURI string) *VirtualDirectoryEndpoint {
+	for _, vdir := range ep.VirtualDirectories {
+		if vdir.BypassAuth && !vdir.Disabled && matchesAuthBypassPrefix(requestURI, vdir.MatchingPath) {
 			thisVdir := vdir
 			return thisVdir
 		}

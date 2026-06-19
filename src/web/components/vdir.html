@@ -83,6 +83,12 @@
                                         <label>Ignore TLS/SSL Verification Error<br><small>For targets that is using self-signed, expired certificate (Not Recommended)</small></label>
                                     </div>
                                 </div>
+                                <div class="field">
+                                    <div class="ui checkbox">
+                                        <input type="checkbox" id="vdBypassAuth">
+                                        <label>Skip Authentication<br><small>Requests under this path bypass <b>all</b> authentication (Basic / Forward / OAuth2). Only enable for auth callback paths, e.g. Authentik per-app forward auth uses <code>/outpost.goauthentik.io</code>.</small></label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -170,10 +176,15 @@
                             }
                         }
 
+                        var bypassAuthIcon = "";
+                        if (vdir.BypassAuth){
+                            bypassAuthIcon = ` <i class="grey shield alternate icon" title="Authentication bypassed for this path"></i>`;
+                        }
+
                         let payload = JSON.stringify(vdir).hexEncode();
 
                         $("#vdirList").append(`<tr vdirid="${vdir.MatchingPath.hexEncode()}" class="vdirEntry" payload="${payload}">
-                            <td data-label="" editable="false" >${vdir.MatchingPath}</td>
+                            <td data-label="" editable="false" >${vdir.MatchingPath}${bypassAuthIcon}</td>
                             <td data-label="" editable="true" datatype="domain">${vdir.Domain} ${tlsIcon}</td>
                             <td class="center aligned" editable="true" datatype="action" data-label="">
                                 <button class="ui circular mini basic icon button editBtn" onclick='editVdir("${vdir.MatchingPath}", "${endpoint}")'><i class="edit icon"></i></button>
@@ -229,6 +240,7 @@
         var targetDomain = $("#virtualDirectoryDomain").val().trim();
         var reqTLS = $("#vdReqTls")[0].checked;
         var skipTLSValidation = $("#vdSkipTLSValidation")[0].checked;
+        var bypassAuth = $("#vdBypassAuth")[0].checked;
 
         //Validate the input data
         if (matchingPath == ""){
@@ -267,6 +279,7 @@
                 "domain":targetDomain,
                 "reqTLS":reqTLS,
                 "skipValid":skipTLSValidation,
+                "bypassAuth":bypassAuth,
             },
             success: function(data){
                 if (data.error != undefined){
@@ -290,6 +303,7 @@
         $("#virtualDirectoryDomain").val("");
         $("#vdReqTls").parent().checkbox("set unchecked");
         $("#vdSkipTLSValidation").parent().checkbox("set unchecked");
+        $("#vdBypassAuth").parent().checkbox("set unchecked");
     }
 
     //Remove Vdir 
@@ -346,6 +360,12 @@
                     checkstate = "checked";
                 }
 
+                //Bypass authentication for this path
+                let bypassAuthState = "";
+                if (payload.BypassAuth){
+                    bypassAuthState = "checked";
+                }
+
                 input = `
                     <div class="ui mini fluid input">
                         <input type="text" class="Domain" value="${domain}">
@@ -359,6 +379,11 @@
                         <input type="checkbox" class="SkipCertValidations" ${checkstate}>
                         <label>Skip Verification<br>
                         <small>Check this if proxy target is using self signed certificates</small></label>
+                    </div><br>
+                    <div class="ui checkbox" style="margin-top: 0.4em;">
+                        <input type="checkbox" class="BypassAuth" ${bypassAuthState}>
+                        <label>Skip Authentication<br>
+                        <small>Bypass all authentication for this path (e.g. Authentik <code>/outpost.goauthentik.io</code>)</small></label>
                     </div>
                 `;
                 column.empty().append(input);
@@ -386,6 +411,7 @@
         let newDomain = $("#vdirList").find(".Domain").val();
         let requireTLS = $("#vdirList").find(".RequireTLS")[0].checked;
         let skipValidation = $("#vdirList").find(".SkipCertValidations")[0].checked;
+        let bypassAuth = $("#vdirList").find(".BypassAuth")[0].checked;
 
         //console.log(mathingPath, newDomain, requireTLS, skipValidation);
 
@@ -398,7 +424,8 @@
                 "domain":newDomain,
                 "path":path,
                 "reqTLS":requireTLS,
-                "skipValid": skipValidation
+                "skipValid": skipValidation,
+                "bypassAuth": bypassAuth
             },
             success: function(data){
                 if (data.error != undefined){

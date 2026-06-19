@@ -96,6 +96,13 @@ func ReverseProxyAddVdir(w http.ResponseWriter, r *http.Request) {
 
 	skipValid := (skipValidStr == "true")
 
+	bypassAuthStr, err := utils.PostPara(r, "bypassAuth")
+	if err != nil {
+		//Assume false
+		bypassAuthStr = "false"
+	}
+	bypassAuth := (bypassAuthStr == "true")
+
 	//Load the target proxy endpoint from runtime
 	var targetProxyEndpoint *dynamicproxy.ProxyEndpoint
 	if eptype == "root" {
@@ -130,6 +137,7 @@ func ReverseProxyAddVdir(w http.ResponseWriter, r *http.Request) {
 		Domain:              domain,
 		RequireTLS:          reqTLS,
 		SkipCertValidations: skipValid,
+		BypassAuth:          bypassAuth,
 	}
 
 	//Add Virtual Directory Rule to this Proxy Endpoint
@@ -237,6 +245,13 @@ func ReverseProxyEditVdir(w http.ResponseWriter, r *http.Request) {
 
 	skipValid := (skipValidStr == "true")
 
+	bypassAuthStr, err := utils.PostPara(r, "bypassAuth")
+	if err != nil {
+		//Assume false
+		bypassAuthStr = "false"
+	}
+	bypassAuth := (bypassAuthStr == "true")
+
 	var targetEndpoint *dynamicproxy.ProxyEndpoint
 	if eptype == "root" {
 		targetEndpoint = dynamicProxyRouter.Root
@@ -273,6 +288,7 @@ func ReverseProxyEditVdir(w http.ResponseWriter, r *http.Request) {
 		Domain:              domain,
 		RequireTLS:          reqTLS,
 		SkipCertValidations: skipValid,
+		BypassAuth:          bypassAuth,
 		Disabled:            false,
 	}
 

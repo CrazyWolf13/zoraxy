@@ -126,6 +126,16 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		//Auth-bypass virtual directories (e.g. Authentik's /outpost.goauthentik.io callback path).
+		//These must be routed to their target BEFORE any authentication provider runs. Otherwise the
+		//forward-auth verify call intercepts the OAuth callback and the flow never completes, causing
+		//an infinite redirect loop in single-application mode (see issue #895). Matching is hardened
+		//against path traversal / boundary tricks (see matchesAuthBypassPrefix).
+		if bypassVdir := sep.GetAuthBypassVirtualDirectoryFromRequestURI(r.RequestURI); bypassVdir != nil {
+			h.vdirRequest(w, r, bypassVdir)
+			return
+		}
+
 		//Validate auth (basic auth or SSO auth)
 		respWritten := handleAuthProviderRouting(sep, w, r, h)
 		if respWritten {

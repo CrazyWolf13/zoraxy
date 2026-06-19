@@ -152,6 +152,7 @@ type VirtualDirectoryEndpoint struct {
 	RequireTLS          bool                 //Target domain require TLS
 	SkipCertValidations bool                 //Set to true to accept self signed certs
 	Disabled            bool                 //If the rule is enabled
+	BypassAuth          bool                 //Skip ALL authentication providers (Basic / Forward / OAuth2 / ZorxAuth) for requests matching this virtual directory. Opt-in, used for auth callback paths such as Authentik's /outpost.goauthentik.io
 	proxy               *dpcore.ReverseProxy `json:"-"`
 	parent              *ProxyEndpoint       `json:"-"`
 }
